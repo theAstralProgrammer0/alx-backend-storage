@@ -1,54 +1,54 @@
-#!/usr/bin/env python3
-"""In this tasks, we will implement a get_page function
-(prototype: def get_page(url: str) -> str:). The core of
-the function is very simple. It uses the requests module
-to obtain the HTML content of a particular URL and returns it.
-
-Start in a new file named web.py and do not reuse the code
-written in exercise.py.
-
-Inside get_page track how many times a particular URL was
-accessed in the key "count:{url}" and cache the result with
-an expiration time of 10 seconds.
-
-Tip: Use http://slowwly.robertomurray.co.uk to simulate
-a slow response and test your caching."""
-
-
-import redis
 import requests
+import time
+from cachetools import TTLCache, cached
 from functools import wraps
 
-r = redis.Redis()
+# Create a cache with a Time-To-Live (TTL) of 10 seconds
+cache = TTLCache(maxsize=100, ttl=10)
+access_count = {}
 
-
-def url_access_count(method):
-    """decorator for get_page function"""
-    @wraps(method)
+# Decorator for caching and tracking
+def cache_and_track(func):
+    @wraps(func)
     def wrapper(url):
-        """wrapper function"""
-        key = "cached:" + url
-        cached_value = r.get(key)
-        if cached_value:
-            return cached_value.decode("utf-8")
-
-            # Get new content and update cache
-        key_count = "count:" + url
-        html_content = method(url)
-
-        r.incr(key_count)
-        r.set(key, html_content, ex=10)
-        r.expire(key, 10)
-        return html_content
+        # Track the number of accesses
+        count_key = f"count:{url}"
+        if count_key in access_count:
+            access_count[count_key] += 1
+        else:
+            access_count[count_key] = 1
+        
+        # Check cache first
+        if url in cache:
+            return cache[url]
+        
+        # If not in cache, fetch the content
+        result = func(url)
+        cache[url] = result
+        return result
+    
     return wrapper
 
-
-@url_access_count
+@cache_and_track
 def get_page(url: str) -> str:
-    """obtain the HTML content of a particular"""
-    results = requests.get(url)
-    return results.text
+    response = requests.get(url)
+    return response.text
 
-
+# Example usage
 if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+    url = "http://slowwly.robertomurray.co.uk/delay/5000/url/https://example.com"
+    
+    # First request, should fetch and cache the result
+    print(get_page(url))
+    
+    # Wait for less than 10 seconds and fetch again, should return cached result
+    time.sleep(5)
+    print(get_page(url))
+    
+    # Wait for more than 10 seconds, cache should expire, and a new request should be made
+    time.sleep(11)
+    print(get_page(url))
+    
+    # Access count should reflect the number of times the URL was accessed
+    print(f"Access count for {url}: {access_count[f'count:{url}']}")
+
