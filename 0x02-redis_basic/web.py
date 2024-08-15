@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 
 import requests
+import redis
 import time
 from functools import wraps
 
-# Dictionary to store cached data and access counts
-cache = {}
-access_count = {}
+r = redis.StrictRedis(host='localhost', port=6379, db=0)
 
-# Decorator for caching and counting accesses
 def cache_page(expiration: int):
+    """
+    A decorator to cache the page content and count accesses.
+
+    Args:
+        expiration (int): Time in seconds for the cache to expire.
+
+    Returns:
+        function: The wrapped function with caching and access counting.
+    """
     def decorator(func):
         @wraps(func)
-        def wrapper(url: str):
-            # Track the number of times the URL was accessed
-            if f"count:{url}" not in access_count:
-                access_count[f"count:{url}"] = 0
-            access_count[f"count:{url}"] += 1
+        def wrapper(url: str) -> str:
+            # Increment the access count
+            r.incr(f"count:{url}")
 
-            # Check if the URL is in the cache and hasn't expired
-            if url in cache:
-                cached_data, timestamp = cache[url]
-                if time.time() - timestamp < expiration:
-                    return cached_data
+            cached_data = r.get(url)
+            if cached_data:
+                return cached_data.decode('utf-8')
 
-            # Fetch new content, cache it, and return it
             result = func(url)
-            cache[url] = (result, time.time())
+            
+            r.setex(url, expiration, result)
+            
             return result
 
         return wrapper
@@ -34,5 +38,18 @@ def cache_page(expiration: int):
 
 @cache_page(expiration=10)
 def get_page(url: str) -> str:
+    """
+    Retrieves the HTML content of a given URL.
+
+    Args:
+        url (str): The URL to fetch the content from.
+
+    Returns:
+        str: The HTML content of the URL.
+    """
     response = requests.get(url)
     return response.text
+
+if __name__ == "__main__":
+    test_url = "http://www.google.com"
+    print(get_page(test_url)) 
