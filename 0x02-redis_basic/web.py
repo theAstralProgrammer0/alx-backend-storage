@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""Module used to operate on redis web"""
 
 import requests
 import redis
