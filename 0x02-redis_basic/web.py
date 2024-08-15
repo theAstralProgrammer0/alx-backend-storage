@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
+
 import requests
 import redis
 import time
 from functools import wraps
 
 r = redis.StrictRedis(host='localhost', port=6379, db=0)
+
 
 def cache_page(expiration: int):
     """
@@ -28,13 +30,13 @@ def cache_page(expiration: int):
                 return cached_data.decode('utf-8')
 
             result = func(url)
-            
             r.setex(url, expiration, result)
-            
+
             return result
 
         return wrapper
     return decorator
+
 
 @cache_page(expiration=10)
 def get_page(url: str) -> str:
@@ -49,7 +51,3 @@ def get_page(url: str) -> str:
     """
     response = requests.get(url)
     return response.text
-
-if __name__ == "__main__":
-    test_url = "http://www.google.com"
-    print(get_page(test_url)) 
